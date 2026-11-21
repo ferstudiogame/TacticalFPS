@@ -51,6 +51,8 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import os
+          nl = chr(10)
           root = Path(".")
           skip = {".git", ".godot", "build"}
           files = []
@@ -70,13 +72,13 @@ jobs:
                   data = p.read_text(encoding="utf-8")
               except Exception:
                   continue
-              block = f"\\n\\n===== FILE: {p.as_posix()} =====\\n{data}"
+          block = f"{nl}{nl}===== FILE: {p.as_posix()} ====={nl}{data}
               if total + len(block) > 450000:
-                  out.append(f"\\n[TRUNCATED at size limit before {p.as_posix()}]")
+                  out.append(f"{nl}[TRUNCATED at size limit before {p.as_posix()}]")
                   break
               out.append(block)
               total += len(block)
-          Path("$RUNNER_TEMP/project_audit.txt").write_text("\\n".join(out), encoding="utf-8")
+          (Path(os.environ["RUNNER_TEMP"]) / "project_audit.txt").write_text(nl.join(out), encoding="utf-8")
           PY
           git worktree add --detach "$RUNNER_TEMP/audit-worktree" HEAD
           mkdir -p "$RUNNER_TEMP/audit-worktree/inspection"
