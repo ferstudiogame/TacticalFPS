@@ -1,4 +1,4 @@
-name: TacticalFPS Android verified build
+name: TacticalFPS Android ARM64 release
 
 on:
   push:
