@@ -1,5 +1,5 @@
 extends CharacterBody3D
-class_name EnemyBot
+class_name FerSWATBot
 
 @export var max_health: float = 100.0
 @export var patrol_speed: float = 1.35
