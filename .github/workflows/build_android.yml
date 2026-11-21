@@ -102,6 +102,15 @@ jobs:
           echo "ANDROID_HOME=$SDK_PATH" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_PATH" >> "$GITHUB_ENV"
 
+      - name: Fix joystick class name reserved by Godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/class_name VirtualJoystick/class_name TacticalVirtualJoystick/' scripts/VirtualJoystick.gd
+          sed -i 's/VirtualJoystick/TacticalVirtualJoystick/g' scripts/TouchHUD.gd
+          grep -q '^class_name TacticalVirtualJoystick$' scripts/VirtualJoystick.gd
+          grep -q 'TacticalVirtualJoystick' scripts/TouchHUD.gd
+
       - name: Import project and run headless checks
         shell: bash
         run: |
