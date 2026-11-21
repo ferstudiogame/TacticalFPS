@@ -59,23 +59,25 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           project = Path("project.godot")
           data = project.read_text(encoding="utf-8")
           key = "textures/vram_compression/import_etc2_astc"
-          setting = re.compile(rf"(?m)^{re.escape(key)}\\s*=\\s*.*$")
-          if setting.search(data):
-              data = setting.sub(f"{key}=true", data)
-          else:
-              rendering = re.search(r"(?m)^\\[rendering\\]\\s*$", data)
-              if rendering:
-                  offset = rendering.end()
-                  data = data[:offset] + f"\\n{key}=true" + data[offset:]
+          lines = data.splitlines()
+          found = False
+          for index, line in enumerate(lines):
+              if line.startswith(key + "="):
+                  lines[index] = key + "=true"
+                  found = True
+                  break
+          if not found:
+              if "[rendering]" in lines:
+                  lines.insert(lines.index("[rendering]") + 1, key + "=true")
               else:
-                  data = data.rstrip() + f"\\n\\n[rendering]\\n{key}=true\\n"
+                  lines.extend(["", "[rendering]", key + "=true"])
+          data = "\n".join(lines) + "\n"
           project.write_text(data, encoding="utf-8")
-          if not re.search(rf"(?m)^{re.escape(key)}=true$", data):
+          if key + "=true" not in lines:
               raise SystemExit("ETC2/ASTC setting was not enabled")
           print(f"Enabled {key}=true")
           PY
