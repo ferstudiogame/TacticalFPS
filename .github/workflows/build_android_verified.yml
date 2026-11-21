@@ -160,7 +160,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q '^textures/vram_compression/import_etc2_astc=true
+          grep -q '^textures/vram_compression/import_etc2_astc=true$' project.godot
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --export-debug "Android ARM64 Debug" "build/$APK_NAME"
           test -s "build/$APK_NAME"
           file "build/$APK_NAME"
           unzip -tq "build/$APK_NAME"
