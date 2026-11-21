@@ -53,6 +53,34 @@ jobs:
           grep -q 'var _joystick: FerVirtualJoystick' scripts/TouchHUD.gd
           grep -q '_joystick = FerVirtualJoystick.new()' scripts/TouchHUD.gd
 
+      - name: Enable Android ETC2/ASTC texture import
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          project = Path("project.godot")
+          data = project.read_text(encoding="utf-8")
+          key = "textures/vram_compression/import_etc2_astc"
+          setting = re.compile(rf"(?m)^{re.escape(key)}\\s*=\\s*.*$")
+          if setting.search(data):
+              data = setting.sub(f"{key}=true", data)
+          else:
+              rendering = re.search(r"(?m)^\\[rendering\\]\\s*$", data)
+              if rendering:
+                  offset = rendering.end()
+                  data = data[:offset] + f"\\n{key}=true" + data[offset:]
+              else:
+                  data = data.rstrip() + f"\\n\\n[rendering]\\n{key}=true\\n"
+          project.write_text(data, encoding="utf-8")
+          if not re.search(rf"(?m)^{re.escape(key)}=true$", data):
+              raise SystemExit("ETC2/ASTC setting was not enabled")
+          print(f"Enabled {key}=true")
+          PY
+          grep -n "textures/vram_compression/import_etc2_astc=true" project.godot
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -130,6 +158,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          grep -q '^textures/vram_compression/import_etc2_astc=true
+          test -s "build/$APK_NAME"
+          file "build/$APK_NAME"
+          unzip -tq "build/$APK_NAME"
+
+      - name: Upload APK and validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TacticalFPS-verified-build-${{ github.run_number }}
+          path: |
+            build/TacticalFPS_Industrial_PVP.apk
+            build/*.log
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish tested APK release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "verified-android-${{ github.run_number }}"
+          name: "TacticalFPS Android verified ${{ github.run_number }}"
+          body: |
+            Godot 4.7.2 ARM64 APK.
+            Passed headless import, editor parse, runtime smoke test and APK archive integrity test.
+          files: build/TacticalFPS_Industrial_PVP.apk
+          fail_on_unmatched_files: true
+          make_latest: true
+ project.godot
           "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --export-debug "Android ARM64 Debug" "build/$APK_NAME"
           test -s "build/$APK_NAME"
           file "build/$APK_NAME"
