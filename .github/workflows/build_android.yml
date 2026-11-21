@@ -45,6 +45,13 @@ jobs:
           rsync -a --exclude='.github/' "$SOURCE_DIR/" "$GITHUB_WORKSPACE/"
           test -f "$GITHUB_WORKSPACE/project.godot"
           echo "Recovered project at $GITHUB_WORKSPACE"
+          echo "=== PROJECT FILES ==="
+          find "$GITHUB_WORKSPACE" -maxdepth 4 -type f | sort | head -250
+          echo "=== GODOT SCRIPTS ==="
+          while IFS= read -r script; do
+            echo "===== $script ====="
+            sed -n '1,260p' "$script"
+          done < <(find "$GITHUB_WORKSPACE" -type f -name '*.gd' | sort)
 
       - name: Java 17
         uses: actions/setup-java@v4
