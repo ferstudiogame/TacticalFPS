@@ -108,8 +108,144 @@ jobs:
           set -euo pipefail
           sed -i 's/class_name VirtualJoystick/class_name TacticalVirtualJoystick/' scripts/VirtualJoystick.gd
           sed -i 's/VirtualJoystick/TacticalVirtualJoystick/g' scripts/TouchHUD.gd
-          grep -q '^class_name TacticalVirtualJoystick$' scripts/VirtualJoystick.gd
+          grep -q '^class_name TacticalVirtualJoystick
+      - name: Import project and run headless checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --import 2>&1 | tee build/godot-import.log
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee build/godot-editor-check.log
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --quit-after 5 2>&1 | tee build/godot-runtime-check.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script|Failed to load resource|Failed loading resource' build/godot-*.log; then
+            echo "Godot reported script or resource errors." >&2
+            exit 1
+          fi
+
+      - name: Export Android ARM64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --export-debug "Android ARM64 Debug" "build/${APK_NAME}"
+          test -s "build/${APK_NAME}"
+          file "build/${APK_NAME}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TacticalFPS-Android-ARM64
+          path: build/TacticalFPS-Android-ARM64.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "android-build-${{ github.run_number }}"
+          name: "Tactical FPS Android build ${{ github.run_number }}"
+          body: |
+            Automated Godot 4.7.2 Android ARM64 debug build.
+            - Architecture: arm64-v8a
+            - Signing: temporary debug key for testing only.
+            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: build/TacticalFPS-Android-ARM64.apk
+          fail_on_unmatched_files: true
+          make_latest: true
+ scripts/VirtualJoystick.gd
           grep -q 'TacticalVirtualJoystick' scripts/TouchHUD.gd
+          if ! grep -q '^textures/vram_compression/import_etc2_astc=true
+      - name: Import project and run headless checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --import 2>&1 | tee build/godot-import.log
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee build/godot-editor-check.log
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --quit-after 5 2>&1 | tee build/godot-runtime-check.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script|Failed to load resource|Failed loading resource' build/godot-*.log; then
+            echo "Godot reported script or resource errors." >&2
+            exit 1
+          fi
+
+      - name: Export Android ARM64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --export-debug "Android ARM64 Debug" "build/${APK_NAME}"
+          test -s "build/${APK_NAME}"
+          file "build/${APK_NAME}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TacticalFPS-Android-ARM64
+          path: build/TacticalFPS-Android-ARM64.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "android-build-${{ github.run_number }}"
+          name: "Tactical FPS Android build ${{ github.run_number }}"
+          body: |
+            Automated Godot 4.7.2 Android ARM64 debug build.
+            - Architecture: arm64-v8a
+            - Signing: temporary debug key for testing only.
+            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: build/TacticalFPS-Android-ARM64.apk
+          fail_on_unmatched_files: true
+          make_latest: true
+ project.godot; then
+            sed -i '/^\[rendering\]$/a textures/vram_compression/import_etc2_astc=true' project.godot
+          fi
+          grep -q '^textures/vram_compression/import_etc2_astc=true
+      - name: Import project and run headless checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --import 2>&1 | tee build/godot-import.log
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee build/godot-editor-check.log
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --quit-after 5 2>&1 | tee build/godot-runtime-check.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script|Failed to load resource|Failed loading resource' build/godot-*.log; then
+            echo "Godot reported script or resource errors." >&2
+            exit 1
+          fi
+
+      - name: Export Android ARM64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --export-debug "Android ARM64 Debug" "build/${APK_NAME}"
+          test -s "build/${APK_NAME}"
+          file "build/${APK_NAME}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TacticalFPS-Android-ARM64
+          path: build/TacticalFPS-Android-ARM64.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "android-build-${{ github.run_number }}"
+          name: "Tactical FPS Android build ${{ github.run_number }}"
+          body: |
+            Automated Godot 4.7.2 Android ARM64 debug build.
+            - Architecture: arm64-v8a
+            - Signing: temporary debug key for testing only.
+            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: build/TacticalFPS-Android-ARM64.apk
+          fail_on_unmatched_files: true
+          make_latest: true
+ project.godot
 
       - name: Import project and run headless checks
         shell: bash
