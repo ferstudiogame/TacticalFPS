@@ -1,5 +1,5 @@
 extends Node3D
-class_name ArenaBuilder
+class_name FerIndustrialArenaBuilder
 
 const ENEMY_SCENE: PackedScene = preload("res://scenes/EnemyBot.tscn")
 var _materials: Dictionary = {}
@@ -249,6 +249,6 @@ func _spawn_enemies() -> void:
 		Vector3(-32.0, 0.0, 24.0)
 	]
 	for spawn_position in spawn_positions:
-		var enemy := ENEMY_SCENE.instantiate() as EnemyBot
+		var enemy := ENEMY_SCENE.instantiate() as FerSWATBot
 		enemy.position = spawn_position
 		add_child(enemy)
