@@ -1,50 +1,54 @@
-name: Build Tactical FPS Android APK
+name: Build Tactical FPS Industrial PvP
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - "TacticalFPS_Industrial_PVP_Source.zip"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: tactical-fps-android-${{ github.ref }}
+  group: tactical-fps-industrial-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   GODOT_VERSION: "4.7.2"
-  APK_NAME: "TacticalFPS-Android-ARM64.apk"
+  APK_NAME: "TacticalFPS_Industrial_PVP.apk"
 
 jobs:
   build-android:
-    name: Validate project and export Android ARM64 APK
+    if: hashFiles('TacticalFPS_Industrial_PVP_Source.zip') != ''
+    name: Validate Godot project and export Android ARM64
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Rebuild source archive from Base64 parts
+      - name: Extract uploaded project ZIP
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/tacticalfps-source"
-          cat source/TacticalFPS_Godot472_source.zip.b64.part-* | base64 --decode > "$RUNNER_TEMP/TacticalFPS_Godot472_source.zip"
-          test -s "$RUNNER_TEMP/TacticalFPS_Godot472_source.zip"
-          unzip -q "$RUNNER_TEMP/TacticalFPS_Godot472_source.zip" -d "$RUNNER_TEMP/tacticalfps-source"
-          SOURCE_DIR="$RUNNER_TEMP/tacticalfps-source/TacticalFPS_Godot472"
+          test -s TacticalFPS_Industrial_PVP_Source.zip
+          mkdir -p "$RUNNER_TEMP/tacticalfps-project"
+          unzip -q TacticalFPS_Industrial_PVP_Source.zip -d "$RUNNER_TEMP/tacticalfps-project"
+          SOURCE_DIR="$RUNNER_TEMP/tacticalfps-project/TacticalFPS_Industrial_PVP"
           test -f "$SOURCE_DIR/project.godot"
+          test -f "$SOURCE_DIR/export_presets.cfg"
+          test -f "$SOURCE_DIR/assets/characters/Swat.fbx"
+          test -f "$SOURCE_DIR/assets/industrial/IndustrialZone.fbx"
           rsync -a --exclude='.github/' "$SOURCE_DIR/" "$GITHUB_WORKSPACE/"
           test -f "$GITHUB_WORKSPACE/project.godot"
 
-      - name: Install Java 17
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Locate preinstalled Android SDK
+      - name: Locate Android SDK
         shell: bash
         run: |
           set -euo pipefail
@@ -52,14 +56,12 @@ jobs:
           test -d "$SDK_PATH"
           SDKMANAGER="$(find "$SDK_PATH/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
           test -n "$SDKMANAGER"
-          test -x "$SDKMANAGER"
           echo "ANDROID_HOME=$SDK_PATH" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_PATH" >> "$GITHUB_ENV"
-          echo "ANDROID_SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
           echo "$SDK_PATH/platform-tools" >> "$GITHUB_PATH"
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
 
-      - name: Install Android build dependencies
+      - name: Install Android build packages
         shell: bash
         run: |
           set -euo pipefail
@@ -79,7 +81,6 @@ jobs:
           "$GODOT_BIN" --version | tee "$RUNNER_TEMP/godot-version.txt"
           grep -q '^4.7.2' "$RUNNER_TEMP/godot-version.txt"
           echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
-
           curl --fail --location --retry 3 "https://downloads.godotengine.org/?flavor=stable&platform=templates&slug=export_templates.tpz&version=${GODOT_VERSION}" -o "$RUNNER_TEMP/templates/export_templates.tpz"
           unzip -q "$RUNNER_TEMP/templates/export_templates.tpz" -d "$RUNNER_TEMP/templates/unpacked"
           TEMPLATE_SOURCE="$RUNNER_TEMP/templates/unpacked/templates"
@@ -89,7 +90,7 @@ jobs:
           cp -a "$TEMPLATE_SOURCE/." "$TEMPLATE_DEST/"
           test -n "$(find "$TEMPLATE_DEST" -maxdepth 1 -type f | head -n 1)"
 
-      - name: Create temporary Android debug signing key
+      - name: Create temporary Android debug key
         shell: bash
         run: |
           set -euo pipefail
@@ -101,29 +102,16 @@ jobs:
           echo "ANDROID_HOME=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}" >> "$GITHUB_ENV"
 
-      - name: Apply Godot 4.7 Android compatibility settings
-        shell: bash
-        run: |
-          set -euo pipefail
-          sed -i 's/class_name VirtualJoystick/class_name TacticalVirtualJoystick/' scripts/VirtualJoystick.gd
-          sed -i 's/VirtualJoystick/TacticalVirtualJoystick/g' scripts/TouchHUD.gd
-          grep -q '^class_name TacticalVirtualJoystick$' scripts/VirtualJoystick.gd
-          grep -q 'TacticalVirtualJoystick' scripts/TouchHUD.gd
-          if ! grep -Fq 'textures/vram_compression/import_etc2_astc=true' project.godot; then
-            sed -i '/^\[rendering\]$/a textures/vram_compression/import_etc2_astc=true' project.godot
-          fi
-          grep -Fq 'textures/vram_compression/import_etc2_astc=true' project.godot
-
-      - name: Import project and run headless checks
+      - name: Import project and validate runtime
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build
-          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --import 2>&1 | tee build/godot-import.log
-          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee build/godot-editor-check.log
-          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --quit-after 5 2>&1 | tee build/godot-runtime-check.log
-          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script|Failed to load resource|Failed loading resource' build/godot-*.log; then
-            echo "Godot reported script or resource errors." >&2
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --import 2>&1 | tee build/import.log
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee build/editor.log
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --quit-after 5 2>&1 | tee build/runtime.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script|Failed to load resource|Failed loading resource' build/*.log; then
+            echo "Godot reported a script or resource error." >&2
             exit 1
           fi
 
@@ -138,22 +126,23 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TacticalFPS-Android-ARM64
-          path: build/TacticalFPS-Android-ARM64.apk
+          name: TacticalFPS-Industrial-PVP-Android
+          path: build/TacticalFPS_Industrial_PVP.apk
           if-no-files-found: error
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "android-build-${{ github.run_number }}"
-          name: "Tactical FPS Android build ${{ github.run_number }}"
+          tag_name: "industrial-pvp-${{ github.run_number }}"
+          name: "Tactical FPS Industrial PvP ${{ github.run_number }}"
           body: |
-            Automated Godot 4.7.2 Android ARM64 debug build.
-            - Architecture: arm64-v8a
-            - Signing: temporary debug key for testing only.
-            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          files: build/TacticalFPS-Android-ARM64.apk
+            Godot 4.7.2 Android ARM64 debug build.
+            - Industrial arena and supplied SWAT character.
+            - Multitouch fire + camera input.
+            - Bot perception, pursuit, flanking and cover.
+            - Temporary debug signature for testing.
+            - Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: build/TacticalFPS_Industrial_PVP.apk
           fail_on_unmatched_files: true
           make_latest: true
