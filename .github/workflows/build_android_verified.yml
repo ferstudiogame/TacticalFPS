@@ -57,31 +57,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          project = Path("project.godot")
-          data = project.read_text(encoding="utf-8")
-          key = "textures/vram_compression/import_etc2_astc"
-          lines = data.splitlines()
-          found = False
-          for index, line in enumerate(lines):
-              if line.startswith(key + "="):
-                  lines[index] = key + "=true"
-                  found = True
-                  break
-          if not found:
-              if "[rendering]" in lines:
-                  lines.insert(lines.index("[rendering]") + 1, key + "=true")
-              else:
-                  lines.extend(["", "[rendering]", key + "=true"])
-          data = "\n".join(lines) + "\n"
-          project.write_text(data, encoding="utf-8")
-          if key + "=true" not in lines:
-              raise SystemExit("ETC2/ASTC setting was not enabled")
-          print(f"Enabled {key}=true")
-          PY
-          grep -n "textures/vram_compression/import_etc2_astc=true" project.godot
+          if grep -q '^textures/vram_compression/import_etc2_astc=' project.godot; then
+            sed -i 's|^textures/vram_compression/import_etc2_astc=.*|textures/vram_compression/import_etc2_astc=true|' project.godot
+          elif grep -q '^\[rendering\]$' project.godot; then
+            sed -i '/^\[rendering\]$/a textures/vram_compression/import_etc2_astc=true' project.godot
+          else
+            printf '\n[rendering]\ntextures/vram_compression/import_etc2_astc=true\n' >> project.godot
+          fi
+          grep -q '^textures/vram_compression/import_etc2_astc=true$' project.godot
 
       - name: Setup Java
         uses: actions/setup-java@v4
