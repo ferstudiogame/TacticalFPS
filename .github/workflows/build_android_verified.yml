@@ -1,11 +1,6 @@
-name: TacticalFPS Android verified build
+name: TacticalFPS Android verified build (manual backup)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "source/**"
-      - ".github/workflows/build_android_verified.yml"
   workflow_dispatch:
 
 permissions:
