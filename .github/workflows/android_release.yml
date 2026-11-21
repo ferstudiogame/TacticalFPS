@@ -72,7 +72,7 @@ jobs:
                   data = p.read_text(encoding="utf-8")
               except Exception:
                   continue
-          block = f"{nl}{nl}===== FILE: {p.as_posix()} ====={nl}{data}
+              block = nl + nl + "===== FILE: " + p.as_posix() + " =====" + nl + data
               if total + len(block) > 450000:
                   out.append(f"{nl}[TRUNCATED at size limit before {p.as_posix()}]")
                   break
