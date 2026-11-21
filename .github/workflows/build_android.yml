@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "TacticalFPS_Industrial_PVP_Source.zip"
+      - "source/**"
+      - ".github/workflows/build_android.yml"
   workflow_dispatch:
 
 permissions:
@@ -20,27 +21,30 @@ env:
 
 jobs:
   build-android:
-    if: hashFiles('TacticalFPS_Industrial_PVP_Source.zip') != ''
     name: Validate Godot project and export Android ARM64
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract uploaded project ZIP
+      - name: Reconstruct original project from repository source parts
         shell: bash
         run: |
           set -euo pipefail
-          test -s TacticalFPS_Industrial_PVP_Source.zip
-          mkdir -p "$RUNNER_TEMP/tacticalfps-project"
-          unzip -q TacticalFPS_Industrial_PVP_Source.zip -d "$RUNNER_TEMP/tacticalfps-project"
-          SOURCE_DIR="$RUNNER_TEMP/tacticalfps-project/TacticalFPS_Industrial_PVP"
-          test -f "$SOURCE_DIR/project.godot"
-          test -f "$SOURCE_DIR/export_presets.cfg"
-          test -f "$SOURCE_DIR/assets/characters/Swat.fbx"
-          test -f "$SOURCE_DIR/assets/industrial/IndustrialZone.fbx"
+          test -d source
+          find source -maxdepth 1 -type f -name 'TacticalFPS_Godot472_source.zip.b64.part-*' | sort > "$RUNNER_TEMP/source-parts.txt"
+          test -s "$RUNNER_TEMP/source-parts.txt"
+          while IFS= read -r part; do cat "$part"; done < "$RUNNER_TEMP/source-parts.txt" > "$RUNNER_TEMP/project.zip.b64"
+          base64 -d "$RUNNER_TEMP/project.zip.b64" > "$RUNNER_TEMP/project.zip"
+          unzip -tq "$RUNNER_TEMP/project.zip"
+          mkdir -p "$RUNNER_TEMP/project"
+          unzip -q "$RUNNER_TEMP/project.zip" -d "$RUNNER_TEMP/project"
+          PROJECT_FILE="$(find "$RUNNER_TEMP/project" -name project.godot -type f -print -quit)"
+          test -n "$PROJECT_FILE"
+          SOURCE_DIR="$(dirname "$PROJECT_FILE")"
           rsync -a --exclude='.github/' "$SOURCE_DIR/" "$GITHUB_WORKSPACE/"
           test -f "$GITHUB_WORKSPACE/project.godot"
+          echo "Recovered project at $GITHUB_WORKSPACE"
 
       - name: Java 17
         uses: actions/setup-java@v4
