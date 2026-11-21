@@ -43,52 +43,17 @@ jobs:
           rsync -a "$(dirname "$project_file")/" "$GITHUB_WORKSPACE/"
           test -f project.godot
 
-      - name: Inspect original gameplay project and publish source audit
+      - name: Apply gameplay improvements to original project
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import os
-          nl = chr(10)
-          root = Path(".")
-          skip = {".git", ".godot", "build"}
-          files = []
-          for p in sorted(root.rglob("*")):
-              if not p.is_file() or any(part in skip for part in p.parts):
-                  continue
-              if p.suffix.lower() in {".gd", ".tscn", ".tres", ".godot", ".cfg", ".json", ".md"}:
-                  files.append(p)
-          out = ["TACTICALFPS SOURCE AUDIT", "========================", "", "PROJECT FILES"]
-          for p in sorted(root.rglob("*")):
-              if p.is_file() and not any(part in skip for part in p.parts):
-                  out.append(f"{p.as_posix()} ({p.stat().st_size} bytes)")
-          out += ["", "SOURCE CONTENTS"]
-          total = 0
-          for p in files:
-              try:
-                  data = p.read_text(encoding="utf-8")
-              except Exception:
-                  continue
-              block = nl + nl + "===== FILE: " + p.as_posix() + " =====" + nl + data
-              if total + len(block) > 450000:
-                  out.append(f"{nl}[TRUNCATED at size limit before {p.as_posix()}]")
-                  break
-              out.append(block)
-              total += len(block)
-          (Path(os.environ["RUNNER_TEMP"]) / "project_audit.txt").write_text(nl.join(out), encoding="utf-8")
-          PY
-          git worktree add --detach "$RUNNER_TEMP/audit-worktree" HEAD
-          mkdir -p "$RUNNER_TEMP/audit-worktree/inspection"
-          cp "$RUNNER_TEMP/project_audit.txt" "$RUNNER_TEMP/audit-worktree/inspection/project_audit.txt"
-          git -C "$RUNNER_TEMP/audit-worktree" checkout -B project-audit
-          git -C "$RUNNER_TEMP/audit-worktree" config user.name "github-actions[bot]"
-          git -C "$RUNNER_TEMP/audit-worktree" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "$RUNNER_TEMP/audit-worktree" add inspection/project_audit.txt
-          git -C "$RUNNER_TEMP/audit-worktree" commit -m "Publish TacticalFPS source audit"
-          git -C "$RUNNER_TEMP/audit-worktree" push --force "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" HEAD:refs/heads/project-audit
+          test -f source/patches/apply_gameplay_overlay.py
+          cp -a source/patches/scripts/. scripts/
+          python3 source/patches/apply_gameplay_overlay.py
+          test -f scripts/ArenaBuilder.gd
+          test -f scripts/EnemyBot.gd
+          grep -q 'func take_damage(amount: float)' scripts/PlayerController.gd
+          grep -q 'func add_kill(headshot: bool = false)' scripts/TouchHUD.gd
 
       - name: Fix Godot joystick class-name collision
         shell: bash
