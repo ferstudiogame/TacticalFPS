@@ -1,0 +1,135 @@
+name: Build Tactical FPS Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tactical-fps-android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.2"
+  APK_NAME: "TacticalFPS-Android-ARM64.apk"
+
+jobs:
+  build-android:
+    name: Validate project and export Android ARM64 APK
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rebuild source archive from Base64 parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tacticalfps-source"
+          cat source/TacticalFPS_Godot472_source.zip.b64.part-* | base64 --decode > "$RUNNER_TEMP/TacticalFPS_Godot472_source.zip"
+          test -s "$RUNNER_TEMP/TacticalFPS_Godot472_source.zip"
+          unzip -q "$RUNNER_TEMP/TacticalFPS_Godot472_source.zip" -d "$RUNNER_TEMP/tacticalfps-source"
+          SOURCE_DIR="$RUNNER_TEMP/tacticalfps-source/TacticalFPS_Godot472"
+          test -f "$SOURCE_DIR/project.godot"
+          rsync -a --exclude='.github/' "$SOURCE_DIR/" "$GITHUB_WORKSPACE/"
+          test -f "$GITHUB_WORKSPACE/project.godot"
+
+      - name: Install Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.1" "ndk;28.1.13356709" "cmake;3.10.2.4988404"
+
+      - name: Download Godot 4.7.2 and export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/godot" "$RUNNER_TEMP/templates"
+          curl --fail --location --retry 3 "https://downloads.godotengine.org/?flavor=stable&platform=linux.64&slug=linux.x86_64.zip&version=${GODOT_VERSION}" -o "$RUNNER_TEMP/godot/godot.zip"
+          unzip -q "$RUNNER_TEMP/godot/godot.zip" -d "$RUNNER_TEMP/godot"
+          GODOT_BIN="$(find "$RUNNER_TEMP/godot" -maxdepth 3 -type f -name 'Godot_v4.7.2-stable_linux.x86_64' | head -n 1)"
+          test -n "$GODOT_BIN"
+          chmod +x "$GODOT_BIN"
+          "$GODOT_BIN" --version | tee "$RUNNER_TEMP/godot-version.txt"
+          grep -q '^4.7.2' "$RUNNER_TEMP/godot-version.txt"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+
+          curl --fail --location --retry 3 "https://downloads.godotengine.org/?flavor=stable&platform=templates&slug=export_templates.tpz&version=${GODOT_VERSION}" -o "$RUNNER_TEMP/templates/export_templates.tpz"
+          unzip -q "$RUNNER_TEMP/templates/export_templates.tpz" -d "$RUNNER_TEMP/templates/unpacked"
+          TEMPLATE_SOURCE="$RUNNER_TEMP/templates/unpacked/templates"
+          if [ ! -d "$TEMPLATE_SOURCE" ]; then TEMPLATE_SOURCE="$RUNNER_TEMP/templates/unpacked"; fi
+          TEMPLATE_DEST="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$TEMPLATE_DEST"
+          cp -a "$TEMPLATE_SOURCE/." "$TEMPLATE_DEST/"
+          test -n "$(find "$TEMPLATE_DEST" -maxdepth 1 -type f | head -n 1)"
+
+      - name: Create temporary Android debug signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK_PATH"
+          echo "ANDROID_HOME=$SDK_PATH" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_PATH" >> "$GITHUB_ENV"
+
+      - name: Import project and run headless checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --import 2>&1 | tee build/godot-import.log
+          "$GODOT_BIN" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee build/godot-editor-check.log
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --quit-after 5 2>&1 | tee build/godot-runtime-check.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script|Failed to load resource|Failed loading resource' build/godot-*.log; then
+            echo "Godot reported script or resource errors." >&2
+            exit 1
+          fi
+
+      - name: Export Android ARM64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" --export-debug "Android ARM64 Debug" "build/${APK_NAME}"
+          test -s "build/${APK_NAME}"
+          file "build/${APK_NAME}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TacticalFPS-Android-ARM64
+          path: build/TacticalFPS-Android-ARM64.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "android-build-${{ github.run_number }}"
+          name: "Tactical FPS Android build ${{ github.run_number }}"
+          body: |
+            Automated Godot 4.7.2 Android ARM64 debug build.
+            - Architecture: arm64-v8a
+            - Signing: temporary debug key for testing only.
+            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: build/TacticalFPS-Android-ARM64.apk
+          fail_on_unmatched_files: true
+          make_latest: true
